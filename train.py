@@ -16,8 +16,7 @@ from tensorboardX import SummaryWriter
 from AverageMeter import AverageMeter
 
 from train_dataset import SourceImageDataset, TargetImageDataset
-from components.Conditional_Generator_asm import Generator
-from components.Conditional_Discriminator_Projection import Discriminator
+from model import Generator, Discriminator, VGG19
 from components.Transform import Transform_block
 import loss
 import matplotlib.pyplot as plt
@@ -31,7 +30,7 @@ def get_lr(optimizer):
 
 
 def train_one_epoch(train_loader_src, train_loader_tgt
-                    , generator, discriminator, Transform
+                    , generator, discriminator, Transform, VGG
                     , G_init_optimizer, G_optimizer, D_optimizer
                     , reconstruct_loss_meter
                     , discriminator_loss_meter, generator_loss_meter
@@ -66,7 +65,7 @@ def train_one_epoch(train_loader_src, train_loader_tgt
         labels = labels.long()
 
         if update_G_only:
-            G_x, G_x_feature = generator(x, labels)
+            G_x = generator(x, labels)
             reconstruct_loss = loss.con_loss_func(x, G_x)
 
             # update G
@@ -86,7 +85,7 @@ def train_one_epoch(train_loader_src, train_loader_tgt
         else:
             # training times , G : D = 1 : self.training_rate
             # Update D
-            G_x, G_x_feature = generator(x, labels)
+            G_x = generator(x, labels)
             D_real = discriminator(y, labels)
             D_photo = discriminator(x, labels)
             D_gray = discriminator(y_gray, labels)
@@ -101,10 +100,12 @@ def train_one_epoch(train_loader_src, train_loader_tgt
 
             if j == conf.training_rate:
                 # Update G
-                G_x, x_feature = generator(x, labels)
-                G_x_feature = generator(G_x, get_feature=True)
-                y_gray_feature = generator(y_gray, get_feature=True)
+                G_x = generator(x, labels)
                 D_fake = discriminator(G_x, labels)
+
+                G_x_feature = VGG(G_x)
+                x_feature = VGG(x)
+                y_gray_feature = VGG(y_gray)
 
                 generator_loss = conf.g_adv_weight * loss.generator_hinge_loss_func(D_fake)
                 content_loss = conf.con_weight * loss.con_loss_func(x_feature, G_x_feature)
@@ -205,7 +206,7 @@ def test(test_loader_src, generator, class_num, cur_epoch, conf):
         labels = labels.long()
 
         for i in range(class_num):
-            G_recon, _ = generator(x, labels[:, i].view(-1))
+            G_recon = generator(x, labels[:, i].view(-1))
             result = torch.cat((x[0], G_recon[0]), 2)
             path = os.path.join(conf.result_dir,
                                 str(cur_epoch) + '_epoch_' + 'test_' + str(n + 1) + "_label_" + str(i) + '.png')
@@ -239,6 +240,10 @@ def train(conf):
     generator = Generator(class_num=train_data_tgt.get_class_size()).to(conf.device)
     discriminator = Discriminator(n_class=train_data_tgt.get_class_size()).to(conf.device)
     Transform = Transform_block().to(conf.device)
+
+    VGG = VGG19(init_weights=conf.vgg_model, feature_mode=True).to(conf.device)
+    for param in VGG.parameters():
+        param.require_grad = False
 
     # Adam optimizer
     G_init_optimizer = optim.Adam(filter(lambda p: p.requires_grad,
@@ -289,7 +294,7 @@ def train(conf):
     for epoch in range(ori_epoch, conf.epoch):
         if epoch < conf.init_epoch:
             train_one_epoch(train_loader_src, train_loader_tgt
-                            , generator, discriminator, Transform
+                            , generator, discriminator, Transform, VGG
                             , G_init_optimizer, G_optimizer, D_optimizer
                             , reconstruct_loss_meter
                             , discriminator_loss_meter, generator_loss_meter
@@ -297,7 +302,7 @@ def train(conf):
                             , epoch, conf, update_G_only=True)
         else:
             train_one_epoch(train_loader_src, train_loader_tgt
-                            , generator, discriminator, Transform
+                            , generator, discriminator, Transform, VGG
                             , G_init_optimizer, G_optimizer, D_optimizer
                             , reconstruct_loss_meter
                             , discriminator_loss_meter, generator_loss_meter
