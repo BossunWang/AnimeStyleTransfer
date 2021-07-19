@@ -87,12 +87,11 @@ def train_one_epoch(train_loader_src, train_loader_tgt
             # Update D
             G_x = generator(x, labels)
             D_real = discriminator(y, labels)
-            D_photo = discriminator(x, labels)
             D_gray = discriminator(y_gray, labels)
             D_blur = discriminator(y_smooth_gray, labels)
             D_fake = discriminator(G_x, labels)
             Discriminator_loss = conf.d_adv_weight * \
-                                 loss.discriminator_hinge_loss_func(D_real, D_photo, D_gray, D_blur, D_fake)
+                                 loss.discriminator_hinge_loss_func(D_real, D_gray, D_blur, D_fake)
 
             D_optimizer.zero_grad()
             Discriminator_loss.backward()
@@ -145,7 +144,7 @@ def train_one_epoch(train_loader_src, train_loader_tgt
                       ', style loss %f'
                       ', color loss %f'
                       ', tv loss %f'
-                      ', transform_loss_val %f'
+                      ', transform loss %f'
                       % (cur_epoch, batch_idx, lr
                          , discriminator_loss_val
                          , generator_loss_val

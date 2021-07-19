@@ -50,24 +50,18 @@ def discriminator_loss_func(real, gray, fake, real_blur):
     return lsgan_loss
 
 
-def discriminator_hinge_loss_func(real, photo, gray, smooth, fake):
+def discriminator_hinge_loss_func(real, gray, smooth, fake):
     d_loss_real = 0
     for i in range(len(real)):
         temp = Hinge_loss(1 - real[i]).mean()
         # temp *= prep_weights[i]
         d_loss_real += temp
 
-    d_loss_photo = 0
-    for i in range(len(photo)):
-        temp = Hinge_loss(1 + photo[i]).mean()
-        # temp *= prep_weights[i]
-        d_loss_photo += temp
-
     d_loss_gray = 0
     for i in range(len(gray)):
         temp = Hinge_loss(1 + gray[i]).mean()
         # temp *= prep_weights[i]
-        d_loss_photo += temp
+        d_loss_gray += temp
 
     d_loss_smooth = 0
     for i in range(len(smooth)):
@@ -81,7 +75,7 @@ def discriminator_hinge_loss_func(real, photo, gray, smooth, fake):
         # temp *= prep_weights[i]
         d_loss_fake += temp
 
-    d_loss = d_loss_real + d_loss_photo + d_loss_gray + d_loss_smooth + d_loss_fake
+    d_loss = d_loss_real + d_loss_gray + d_loss_smooth + d_loss_fake
     return d_loss
 
 

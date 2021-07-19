@@ -24,7 +24,7 @@ def load_image(image_path, x32=False):
 
     if x32: # resize image to multiple of 32s
         def to_32s(x):
-            return 256 if x < 256 else x - x%32
+            return 256 if x < 256 else x - x % 32
         img = cv2.resize(img, (to_32s(w), to_32s(h)))
     else:
         img = cv2.resize(img, (w, h))
@@ -35,6 +35,7 @@ def load_image(image_path, x32=False):
 
 
 def test(args):
+    label_name_list = ['Hayao', 'Paprika', 'Shinkai']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     generator = Generator()
@@ -57,15 +58,21 @@ def test(args):
             continue
 
         image = load_image(os.path.join(args.input_dir, image_name), args.x32)
+        input = image.permute(2, 0, 1).unsqueeze(0).to(device)
+        print(input.size())
+        labels = np.arange(args.class_num)
+        labels = labels.reshape(1, -1).repeat(input.size(0), axis=0)
+        labels = torch.from_numpy(labels).to(device)
+        labels = labels.long()
 
-        with torch.no_grad():
-            input = image.permute(2, 0, 1).unsqueeze(0).to(device)
-            out = generator(input, args.upsample_align).squeeze(0).permute(1, 2, 0).cpu().numpy()
-            out = (out + 1)*127.5
-            out = np.clip(out, 0, 255).astype(np.uint8)
-
-        cv2.imwrite(os.path.join(args.output_dir, image_name), cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
-        print(f"image saved: {image_name}")
+        for i in range(args.class_num):
+            with torch.no_grad():
+                out = generator(input, labels[:, i].view(-1), args.upsample_align).squeeze(0).permute(1, 2, 0).cpu().numpy()
+                out = (out + 1)*127.5
+                out = np.clip(out, 0, 255).astype(np.uint8)
+            save_name = os.path.join(args.output_dir, image_name.replace('.jpg', '_' + label_name_list[i] + '.jpg'))
+            cv2.imwrite(save_name, cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
+            print(f"image saved: {save_name}")
 
     
 if __name__ == '__main__':
@@ -99,6 +106,12 @@ if __name__ == '__main__':
         '--x32',
         action="store_true",
     )
+    parser.add_argument(
+        '--class_num',
+        type=int,
+        default=3,
+    )
+
     args = parser.parse_args()
     
     test(args)
