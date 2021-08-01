@@ -10,14 +10,17 @@ import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-import threading
-import queue
+from torchvision import transforms
+from PIL import Image
 
 
 class SourceImageDataset(Dataset):
     def __init__(self, source_data_root, input_size):
         self.source_data_root = source_data_root
-        path, dirs, self.source_files = next(os.walk(self.source_data_root))
+        self.source_files = []
+        for dirPath, dirNames, fileNames in os.walk(source_data_root):
+            for f in fileNames:
+                self.source_files.append(os.path.join(dirPath, f))
         self.input_size = input_size
 
     def __len__(self):
@@ -25,7 +28,6 @@ class SourceImageDataset(Dataset):
 
     def __getitem__(self, index):
         image_path = self.source_files[index]
-        image_path = os.path.join(self.source_data_root, image_path)
         image1 = cv2.imread(image_path)
         image1 = cv2.resize(image1, self.input_size)
         image1 = cv2.cvtColor(image1, cv2.COLOR_BGR2RGB)
@@ -70,7 +72,7 @@ class TargetImageDataset(Dataset):
 
                 if dirPath.split('/')[-1] == "style":
                     self.target_data_list.append(f)
-                else:
+                elif dirPath.split('/')[-1] == "smooth":
                     self.target_smooth_data_list.append(f)
                 self.target_label_list.append(label_index)
 
@@ -134,31 +136,37 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     input_size = tuple([256, 256])
-    train_data_src = SourceImageDataset('../../AnimeGANv2/dataset/train_photo/', input_size=input_size)
-    train_data_tgt = TargetImageDataset('../../AnimeGANv2/dataset/new_anime_dataset', input_size=input_size)
-    test_data_tgt = SourceImageDataset('../../AnimeGANv2/dataset/test/test_photo/', input_size=input_size)
+    train_data_src = SourceImageDataset('../../AnimeGAN/dataset/train_photo/', input_size=input_size)
+    train_data_tgt = TargetImageDataset('../style_dataset', input_size=input_size)
+    test_data_tgt = SourceImageDataset('../../places365/val/val_256', input_size=input_size)
 
     batch_size = 12
     train_loader_src = torch.utils.data.DataLoader(train_data_src
                                                    , batch_size=batch_size
                                                    , shuffle=True,
-                                                   drop_last=True)
+                                                   drop_last=False)
     train_loader_tgt = torch.utils.data.DataLoader(train_data_tgt
                                                    , batch_size=batch_size
                                                    , shuffle=True,
-                                                   drop_last=True)
+                                                   drop_last=False)
 
-    train_loader_tgt_iterator = iter(train_loader_tgt)
     test_loader_src = torch.utils.data.DataLoader(test_data_tgt
                                                   , batch_size=1
-                                                  , shuffle=False
-                                                  , drop_last=True)
+                                                  , shuffle=True
+                                                  , drop_last=False)
 
-    for (x, x_gray) in train_loader_src:
+    train_loader_src_iterator = iter(train_loader_src)
+    train_loader_tgt_iterator = iter(train_loader_tgt)
+    max_iter = len(train_data_tgt) // batch_size
+
+    for current_iter in range(max_iter):
         try:
+            x, x_gray = next(train_loader_src_iterator)
             y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
         except StopIteration:
+            train_loader_src_iterator = iter(train_loader_src)
             train_loader_tgt_iterator = iter(train_loader_tgt)
+            x, x_gray = next(train_loader_src_iterator)
             y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
 
         pos_result = torch.cat((x[0], y[0]), 2)

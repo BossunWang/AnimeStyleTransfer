@@ -1,2 +1,2 @@
 # AnimeStyleTransfer
-dirNames: ['Hayao', 'Paprika', 'Shinkai']
+dirNames: ['Hayao', 'Shinkai', 'CG']

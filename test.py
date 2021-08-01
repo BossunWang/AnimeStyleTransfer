@@ -35,17 +35,13 @@ def load_image(image_path, x32=False):
 
 
 def test(args):
-    label_name_list = ['Hayao', 'Paprika', 'Shinkai']
+    label_name_list = ['Hayao', 'Shinkai', 'CG']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     generator = Generator()
 
     checkpoint = torch.load(args.checkpoint, map_location=device)
-    if "epoch" in checkpoint \
-            and "generator" in checkpoint \
-            and "discriminator" in checkpoint \
-            and "G_optimizer" in checkpoint \
-            and "D_optimizer" in checkpoint:
+    if "generator" in checkpoint :
         generator.load_state_dict(checkpoint['generator'])
 
     generator.to(device).eval()
