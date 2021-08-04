@@ -38,7 +38,7 @@ def test(args):
     label_name_list = ['Hayao', 'Shinkai', 'CG']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    generator = Generator()
+    generator = Generator(class_num=len(label_name_list))
 
     checkpoint = torch.load(args.checkpoint, map_location=device)
     if "generator" in checkpoint :
@@ -56,12 +56,12 @@ def test(args):
         image = load_image(os.path.join(args.input_dir, image_name), args.x32)
         input = image.permute(2, 0, 1).unsqueeze(0).to(device)
         print(input.size())
-        labels = np.arange(args.class_num)
+        labels = np.arange(len(label_name_list))
         labels = labels.reshape(1, -1).repeat(input.size(0), axis=0)
         labels = torch.from_numpy(labels).to(device)
         labels = labels.long()
 
-        for i in range(args.class_num):
+        for i in range(len(label_name_list)):
             with torch.no_grad():
                 out = generator(input, labels[:, i].view(-1), args.upsample_align).squeeze(0).permute(1, 2, 0).cpu().numpy()
                 out = (out + 1)*127.5
@@ -101,11 +101,6 @@ if __name__ == '__main__':
     parser.add_argument(
         '--x32',
         action="store_true",
-    )
-    parser.add_argument(
-        '--class_num',
-        type=int,
-        default=3,
     )
 
     args = parser.parse_args()
