@@ -16,11 +16,17 @@ def load_image(image_path, x32=False):
     img = cv2.imread(image_path).astype(np.float32)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     h, w = img.shape[:2]
-    w = w // args.resize_scalar
-    h = h // args.resize_scalar
+    if w > h:
+        w_scalar = args.resize / w
+        w = args.resize
+        h *= w_scalar
+    else:
+        h_scalar = args.resize / h
+        h = args.resize
+        w *= h_scalar
 
-    w = (w // 100) * 100
-    h = (h // 100) * 100
+    w = int(w // 100) * 100
+    h = int(h // 100) * 100
 
     if x32: # resize image to multiple of 32s
         def to_32s(x):
@@ -36,7 +42,7 @@ def load_image(image_path, x32=False):
 
 def test(args):
     label_name_list = ['Hayao', 'Shinkai', 'CG']
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
     
     generator = Generator(class_num=len(label_name_list))
 
@@ -89,9 +95,9 @@ if __name__ == '__main__':
         default='./samples/results',
     )
     parser.add_argument(
-        '--resize_scalar',
+        '--resize',
         type=int,
-        default=1,
+        default=1000,
     )
     parser.add_argument(
         '--upsample_align',
