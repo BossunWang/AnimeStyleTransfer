@@ -136,8 +136,8 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     input_size = tuple([256, 256])
-    train_data_src = SourceImageDataset('../../AnimeGAN/dataset/train_photo/', input_size=input_size)
-    train_data_tgt = TargetImageDataset('../style_dataset', input_size=input_size)
+    train_data_src = SourceImageDataset('../Photo_image_training_data/', input_size=input_size)
+    train_data_tgt = TargetImageDataset('../style_dataset/cluster_labels', input_size=input_size)
     test_data_tgt = SourceImageDataset('../../places365/val/val_256', input_size=input_size)
 
     batch_size = 12

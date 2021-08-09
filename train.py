@@ -210,9 +210,9 @@ def train(conf):
     conf.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     img_size = tuple(conf.img_size)
-    train_data_src = SourceImageDataset('../../AnimeGAN/dataset/train_photo/', input_size=img_size)
-    train_data_tgt = TargetImageDataset('../style_dataset', input_size=img_size)
-    test_data_tgt = SourceImageDataset('../../places365/val/val_256', input_size=img_size)
+    train_data_src = SourceImageDataset(conf.src_dataset, input_size=img_size)
+    train_data_tgt = TargetImageDataset(conf.tgt_dataset, input_size=img_size)
+    test_data_tgt = SourceImageDataset(conf.val_dataset, input_size=img_size)
 
     train_loader_src = torch.utils.data.DataLoader(train_data_src
                                                    , batch_size=conf.batch_size

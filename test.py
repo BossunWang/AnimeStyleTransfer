@@ -41,7 +41,7 @@ def load_image(image_path, x32=False):
 
 
 def test(args):
-    label_name_list = ['Hayao', 'Shinkai', 'CG']
+    label_name_list = ['3', '2', '1', '0']
     device = torch.device('cpu')
     
     generator = Generator(class_num=len(label_name_list))
@@ -56,8 +56,10 @@ def test(args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     for image_name in sorted(os.listdir(args.input_dir)):
-        if os.path.splitext(image_name)[-1].lower() not in [".jpg", ".png", ".bmp", ".tiff"]:
+        if os.path.splitext(image_name)[-1].lower() not in [".jpg", ".png", ".bmp", ".tiff", ".jpeg"]:
             continue
+
+        extension = os.path.splitext(image_name)[-1].lower()
 
         image = load_image(os.path.join(args.input_dir, image_name), args.x32)
         input = image.permute(2, 0, 1).unsqueeze(0).to(device)
@@ -69,10 +71,12 @@ def test(args):
 
         for i in range(len(label_name_list)):
             with torch.no_grad():
-                out = generator(input, labels[:, i].view(-1), args.upsample_align).squeeze(0).permute(1, 2, 0).cpu().numpy()
+                out = generator(input
+                                , labels[:, i].view(-1), args.upsample_align).squeeze(0).permute(1, 2, 0).cpu().numpy()
                 out = (out + 1)*127.5
                 out = np.clip(out, 0, 255).astype(np.uint8)
-            save_name = os.path.join(args.output_dir, image_name.replace('.jpg', '_' + label_name_list[i] + '.jpg'))
+            save_name = os.path.join(args.output_dir, image_name.replace(extension
+                                                                         , '_' + label_name_list[i] + extension))
             cv2.imwrite(save_name, cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
             print(f"image saved: {save_name}")
 

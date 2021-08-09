@@ -66,7 +66,8 @@ def main():
     # make_edge_smooth('../../AnimeGANv2/dataset/new_anime_dataset/Hayao', args.img_size)
     # make_edge_smooth('../../AnimeGANv2/dataset/new_anime_dataset/Paprika', args.img_size)
     # make_edge_smooth('../../AnimeGANv2/dataset/new_anime_dataset/Shinkai', args.img_size)
-    make_edge_smooth('../style_dataset/CG', args.img_size)
+    # make_edge_smooth('../style_dataset/CG', args.img_size)
+    make_edge_smooth('../style_dataset/safebooru', args.img_size)
 
 
 if __name__ == '__main__':
