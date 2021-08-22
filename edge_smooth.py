@@ -19,11 +19,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def make_edge_smooth(dataset_name, img_size):
-    check_folder(os.path.join(dataset_name, 'smooth'))
+def make_edge_smooth(dataset_name, img_size, target_dir='smooth'):
+    check_folder(os.path.join(dataset_name, target_dir))
 
     file_list = glob(os.path.join(dataset_name, 'style', "*.*"))
-    save_dir = os.path.join(dataset_name, 'smooth')
+    save_dir = os.path.join(dataset_name, target_dir)
 
     kernel_size = 5
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
@@ -67,7 +67,10 @@ def main():
     # make_edge_smooth('../../AnimeGANv2/dataset/new_anime_dataset/Paprika', args.img_size)
     # make_edge_smooth('../../AnimeGANv2/dataset/new_anime_dataset/Shinkai', args.img_size)
     # make_edge_smooth('../style_dataset/CG', args.img_size)
-    make_edge_smooth('../style_dataset/safebooru', args.img_size)
+    # make_edge_smooth('../style_dataset/safebooru', args.img_size)
+
+    make_edge_smooth('../style_dataset/CG', args.img_size * 2, 'smooth_HD')
+    make_edge_smooth('../style_dataset/safebooru', args.img_size * 2, 'smooth_HD')
 
 
 if __name__ == '__main__':

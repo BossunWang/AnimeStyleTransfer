@@ -19,11 +19,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def make_edge_smooth(dataset_name, img_size):
-    check_folder(os.path.join(dataset_name, 'style'))
+def crop_img(dataset_name, img_size, target_dir='style'):
+    check_folder(os.path.join(dataset_name, target_dir))
 
     file_list = glob(os.path.join(dataset_name, 'origin', "*.*"))
-    save_dir = os.path.join(dataset_name, 'style')
+    save_dir = os.path.join(dataset_name, target_dir)
 
     for f in tqdm(file_list):
         file_name = os.path.basename(f)
@@ -52,8 +52,13 @@ def main():
     if args is None:
         exit()
 
-    # make_edge_smooth('../style_dataset/CG', args.img_size)
-    make_edge_smooth('../style_dataset/safebooru', args.img_size)
+    # crop_img('../style_dataset/CG', args.img_size)
+    # crop_img('../style_dataset/safebooru', args.img_size)
+
+    crop_img('../style_dataset/CG', args.img_size * 2, 'style_HD')
+    crop_img('../style_dataset/safebooru', args.img_size  * 2, 'style_HD')
+
+    crop_img('../../DIV2K_HR', args.img_size * 2, 'crop_HD')
 
 
 if __name__ == '__main__':

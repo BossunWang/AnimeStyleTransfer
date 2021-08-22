@@ -209,9 +209,10 @@ def train(conf):
     """
     conf.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    img_size = tuple(conf.img_size)
+    img_size = (conf.img_size, conf.img_size)
     train_data_src = SourceImageDataset(conf.src_dataset, input_size=img_size)
-    train_data_tgt = TargetImageDataset(conf.tgt_dataset, input_size=img_size)
+    train_data_tgt = TargetImageDataset(conf.tgt_dataset, input_size=img_size
+                                        , style_dir=conf.tgt_style_dir, smooth_dir=conf.tgt_smooth_dir)
     test_data_tgt = SourceImageDataset(conf.val_dataset, input_size=img_size)
 
     train_loader_src = torch.utils.data.DataLoader(train_data_src
@@ -321,6 +322,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='semi-siamese_training for face recognition.')
     parser.add_argument('--src_dataset', type=str, default='train_photo', help='dataset_name')
     parser.add_argument('--tgt_dataset', type=str, default='Hayao', help='dataset_name')
+    parser.add_argument('--tgt_style_dir', type=str, default='style', help='dataset_name')
+    parser.add_argument('--tgt_smooth_dir', type=str, default='smooth', help='dataset_name')
     parser.add_argument('--val_dataset', type=str, default='val', help='dataset_name')
 
     parser.add_argument('--max_iter', type=int, default=100000, help='The number of epochs to run')
@@ -354,7 +357,7 @@ if __name__ == '__main__':
     parser.add_argument('--gan_type', type=str, default='lsgan',
                         help='[gan / lsgan / wgan-gp / wgan-lp / dragan / hinge')
 
-    parser.add_argument('--img_size', type=list, default=[256, 256], help='The size of image: H and W')
+    parser.add_argument('--img_size', type=int, default=256, help='The size of image: H and W')
 
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoint',
                         help='Directory name to save the checkpoints')

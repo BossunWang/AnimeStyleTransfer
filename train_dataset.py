@@ -51,7 +51,7 @@ class SourceImageDataset(Dataset):
 
 
 class TargetImageDataset(Dataset):
-    def __init__(self, target_data_root, input_size):
+    def __init__(self, target_data_root, input_size, style_dir='style', smooth_dir='smooth'):
         self.target_data_root = target_data_root
         self.target_data_list = []
         self.target_smooth_data_list = []
@@ -70,9 +70,9 @@ class TargetImageDataset(Dataset):
                 f = os.path.join(dirPath, f)
                 label_index = self.dirNames.index(key)
 
-                if dirPath.split('/')[-1] == "style":
+                if dirPath.split('/')[-1] == style_dir:
                     self.target_data_list.append(f)
-                elif dirPath.split('/')[-1] == "smooth":
+                elif dirPath.split('/')[-1] == smooth_dir:
                     self.target_smooth_data_list.append(f)
                 self.target_label_list.append(label_index)
 
