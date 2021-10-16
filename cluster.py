@@ -143,10 +143,10 @@ def cluster(data_dir):
     plt.title('UMAP projection of the Anime dataset', fontsize=24)
     plt.savefig('UMAP_DBSCAN_exclude_outlier.jpg')
 
-    #
     image_path_list0 = image_path_list[clustering.labels_ == 0]
     image_path_list1 = image_path_list[clustering.labels_ == 1]
     image_path_list0_exclude_outlier = image_path_list0[[second_clustering.labels_ == max_cluster_index]]
+    image_path_list0_outlier = image_path_list0[[second_clustering.labels_ != max_cluster_index]]
     embedding0 = second_embedding[[second_clustering.labels_ == max_cluster_index]]
     embedding1 = embedding[clustering.labels_ == 1]
     label0 = np.zeros(embedding0.shape[0])
@@ -180,6 +180,8 @@ def cluster(data_dir):
         os.makedirs(os.path.join(data_dir, 'cluster_labels', str(label), 'style'), exist_ok=True)
         os.makedirs(os.path.join(data_dir, 'cluster_labels', str(label), 'smooth'), exist_ok=True)
 
+    os.makedirs('outlier', exist_ok=True)
+
     for index, image_path in enumerate(final_image_path_list):
         label = int(final_labels[index])
         image_file = image_path.split('/')[-1]
@@ -189,6 +191,12 @@ def cluster(data_dir):
         new_smooth_image_path = os.path.join(data_dir, 'cluster_labels', str(label), 'smooth', image_file)
         new_style_image_path = os.path.join(data_dir, 'cluster_labels', str(label), 'style', image_file)
         copyfile(smooth_image_path, new_smooth_image_path)
+        copyfile(style_image_path, new_style_image_path)
+
+    for index, image_path in enumerate(image_path_list0_outlier):
+        image_file = image_path.split('/')[-1]
+        style_image_path = image_path.replace('smooth', 'style')
+        new_style_image_path = os.path.join('outlier', image_file)
         copyfile(style_image_path, new_style_image_path)
 
 
