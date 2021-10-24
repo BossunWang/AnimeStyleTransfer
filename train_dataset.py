@@ -58,7 +58,7 @@ class TargetImageDataset(Dataset):
         self.target_label_list = []
 
         _, self.dirNames, _ = next(os.walk(self.target_data_root))
-        print('dirNames:', self.dirNames)
+        # print('dirNames:', self.dirNames)
 
         for dirPath, _, fileNames in os.walk(self.target_data_root):
             key = dirPath.split('/')[-2]
