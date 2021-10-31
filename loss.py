@@ -111,19 +111,14 @@ def transform_loss(transform_feature1, transform_feature2):
     return F.mse_loss(transform_feature1, transform_feature2)
 
 
-def gram_matrix(input):
-    a, b, c, d = input.size()
-    # a=batch size(=1)
-    # b=number of feature maps
-    # (c,d)=dimensions of a f. map (N=c*d)
+def gram_matrix(input_tensor):
+    b, c, h, w = input_tensor.size()
+    features = input_tensor.view(b, c, h * w)
+    features_t = features.transpose(1, 2)
+    inputs = torch.zeros(b, c, c).type(features.type())
+    gram = torch.baddbmm(inputs, features, features_t, beta=0, alpha=1./(c * h * w), out=None)
 
-    features = input.view(a * b, c * d)  # resise F_XL into \hat F_XL
-
-    G = torch.mm(features, features.t())  # compute the gram product
-
-    # we 'normalize' the values of the gram matrix
-    # by dividing by the number of element in each feature maps.
-    return G.div(a * b * c * d)
+    return gram
 
 
 def style_loss_func(input_feature, target_feature):

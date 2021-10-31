@@ -4,7 +4,7 @@ CUDA_VISIBLE_DEVICES=1,0 python train.py \
     --val_dataset '../../places365/val/val_256' \
     --reconstruct_iter 5000 \
     --max_iter 40000 \
-    --print_freq 300 \
+    --print_freq 100 \
     --save_freq 1000 \
     --test_freq 500 \
     --d_adv_weight 1. \
@@ -14,7 +14,9 @@ CUDA_VISIBLE_DEVICES=1,0 python train.py \
     --color_weight 10. \
     --tv_weight 1. \
     --transform_weight 50. \
-    --training_rate 1
+    --d_steps_per_iter 1 \
+    --g_steps_per_iter 1 \
+    --mixed_precision True
 #    --pretrained True \
 #    --pretrain_model 'checkpoint/ASMStyleGAN_Epoch_4000.pt'
 

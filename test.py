@@ -41,7 +41,7 @@ def load_image(image_path, x32=False):
 
 
 def test(args):
-    label_name_list = ['3', '2', '1', '0']
+    label_name_list = ['1', '0']
     device = torch.device('cpu')
     
     generator = Generator(class_num=len(label_name_list))

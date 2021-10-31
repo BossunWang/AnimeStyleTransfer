@@ -16,10 +16,18 @@ from tensorboardX import SummaryWriter
 from AverageMeter import AverageMeter
 
 from train_dataset import SourceImageDataset, TargetImageDataset
-from model import Generator, Discriminator, VGG19
+from model import Generator, Discriminator
+from VGG import VGGFeatures
 from components.Transform import Transform_block
 import loss
 import matplotlib.pyplot as plt
+
+
+class dummy_context_mgr():
+    def __enter__(self):
+        return None
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
 
 
 def get_lr(optimizer):
@@ -29,42 +37,50 @@ def get_lr(optimizer):
         return param_group['lr']
 
 
-def train_one_iter(train_loader_src, train_loader_tgt
-                    , generator, discriminator, Transform, VGG
-                    , G_init_optimizer, G_optimizer, D_optimizer
-                    , reconstruct_loss_meter
-                    , discriminator_loss_meter, generator_loss_meter
-                    , content_loss_meter, style_loss_meter, color_loss_meter, tv_loss_meter, transform_loss_meter
-                    , cur_iter, conf, reconstruct_only=False, update_G=False):
-    train_loader_src_iterator = iter(train_loader_src)
-    train_loader_tgt_iterator = iter(train_loader_tgt)
-
-    try:
-        x, x_gray = next(train_loader_src_iterator)
-        y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
-    except StopIteration:
-        train_loader_src_iterator = iter(train_loader_src)
-        train_loader_tgt_iterator = iter(train_loader_tgt)
-        x, x_gray = next(train_loader_src_iterator)
-        y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
-
+def transform_data_device_type(conf, x, x_gray, y, y_gray, labels):
     batch_size = x.size(0)
-    global_batch_idx = cur_iter
     x = x.to(conf.device)
     x_gray = x_gray.to(conf.device)
     y = y.to(conf.device)
     y_gray = y_gray.to(conf.device)
     labels = labels.to(conf.device)
-    labels = labels.long()
+    return batch_size, x.float(), x_gray.float(), y.float(), y_gray.float(), labels.long()
 
+
+def train_one_iter(train_loader_src, train_loader_tgt
+                   , train_loader_src_iterator, train_loader_tgt_iterator
+                   , generator, discriminator, Transform, VGG
+                   , G_init_optimizer, G_optimizer, D_optimizer, scaler
+                   , reconstruct_loss_meter
+                   , discriminator_loss_meter, generator_loss_meter
+                   , content_loss_meter, style_loss_meter, color_loss_meter, tv_loss_meter, transform_loss_meter
+                   , cur_iter, conf, reconstruct_only=False):
+    global_batch_idx = cur_iter
     if reconstruct_only:
-        G_x = generator(x, labels)
-        reconstruct_loss = loss.con_loss_func(x, G_x)
+        try:
+            x, x_gray = next(train_loader_src_iterator)
+            y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
+        except StopIteration:
+            train_loader_src_iterator = iter(train_loader_src)
+            train_loader_tgt_iterator = iter(train_loader_tgt)
+            x, x_gray = next(train_loader_src_iterator)
+            y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
+
+        batch_size, x, x_gray, y, y_gray, labels = transform_data_device_type(conf, x, x_gray, y, y_gray, labels)
+
+        G_init_optimizer.zero_grad()
+        with torch.cuda.amp.autocast() if conf.mixed_precision else dummy_context_mgr() as mpc:
+            G_x = generator(x, labels)
+            reconstruct_loss = loss.con_loss_func(x, G_x)
 
         # update G
-        G_init_optimizer.zero_grad()
-        reconstruct_loss.backward()
-        G_init_optimizer.step()
+        if conf.mixed_precision:
+            scaler.scale(reconstruct_loss).backward()
+            scaler.step(G_init_optimizer)
+            scaler.update()
+        else:
+            reconstruct_loss.backward()
+            G_init_optimizer.step()
 
         reconstruct_loss_meter.update(reconstruct_loss.item(), batch_size)
         if cur_iter % conf.print_freq == 0:
@@ -76,50 +92,88 @@ def train_one_iter(train_loader_src, train_loader_tgt
             conf.writer.add_scalar('Train_lr', lr, global_batch_idx)
             reconstruct_loss_meter.reset()
     else:
-        # training times , G : D = 1 : self.training_rate
-        # Update D
-        G_x = generator(x, labels)
-        D_real = discriminator(y, labels)
-        D_gray = discriminator(y_gray, labels)
-        D_blur = discriminator(y_smooth_gray, labels)
-        D_fake = discriminator(G_x, labels)
-        Discriminator_loss = conf.d_adv_weight * \
-                             loss.discriminator_hinge_loss_func(D_real, D_gray, D_blur, D_fake)
+        for step_index in range(conf.d_steps_per_iter):
+            # Update D
+            try:
+                x, x_gray = next(train_loader_src_iterator)
+                y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
+            except StopIteration:
+                train_loader_src_iterator = iter(train_loader_src)
+                train_loader_tgt_iterator = iter(train_loader_tgt)
+                x, x_gray = next(train_loader_src_iterator)
+                y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
 
-        D_optimizer.zero_grad()
-        Discriminator_loss.backward()
-        D_optimizer.step()
+            batch_size, x, x_gray, y, y_gray, labels = transform_data_device_type(conf, x, x_gray, y, y_gray, labels)
 
-        discriminator_loss_meter.update(Discriminator_loss.item(), batch_size)
+            D_optimizer.zero_grad()
+            with torch.cuda.amp.autocast() if conf.mixed_precision else dummy_context_mgr() as mpc:
+                G_x = generator(x, labels)
+                D_real = discriminator(y, labels)
+                D_gray = discriminator(y_gray, labels)
+                D_blur = discriminator(y_smooth_gray, labels)
+                D_fake = discriminator(G_x, labels)
+                Discriminator_loss = conf.d_adv_weight * \
+                                     loss.discriminator_hinge_loss_func(D_real, D_gray, D_blur, D_fake)
 
-        if update_G:
+                discriminator_loss_meter.update(Discriminator_loss.item(), batch_size)
+
+            if conf.mixed_precision:
+                scaler.scale(Discriminator_loss).backward()
+                scaler.step(D_optimizer)
+                scaler.update()
+            else:
+                Discriminator_loss.backward()
+                D_optimizer.step()
+
+        for step_index in range(conf.g_steps_per_iter):
             # Update G
-            G_x = generator(x, labels)
-            D_fake = discriminator(G_x, labels)
+            try:
+                x, x_gray = next(train_loader_src_iterator)
+                y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
+            except StopIteration:
+                train_loader_src_iterator = iter(train_loader_src)
+                train_loader_tgt_iterator = iter(train_loader_tgt)
+                x, x_gray = next(train_loader_src_iterator)
+                y, y_gray, y_smooth, y_smooth_gray, labels = next(train_loader_tgt_iterator)
 
-            G_x_feature = VGG(G_x)
-            x_feature = VGG(x)
-            y_gray_feature = VGG(y_gray)
-
-            generator_loss = conf.g_adv_weight * loss.generator_hinge_loss_func(D_fake)
-            content_loss = conf.con_weight * loss.con_loss_func(x_feature, G_x_feature)
-            style_loss = conf.sty_weight * loss.style_loss_func(y_gray_feature, G_x_feature)
-            color_loss = conf.color_weight * loss.color_loss_func(x, G_x)
-            tv_loss = conf.tv_weight * loss.total_variation_loss(G_x)
-            transform_loss = conf.transform_weight * loss.transform_loss(Transform(x), Transform(G_x))
-
-            Generator_loss = generator_loss + content_loss + style_loss + color_loss + tv_loss + transform_loss
+            batch_size, x, x_gray, y, y_gray, labels = transform_data_device_type(conf, x, x_gray, y, y_gray, labels)
 
             G_optimizer.zero_grad()
-            Generator_loss.backward()
-            G_optimizer.step()
+            with torch.cuda.amp.autocast() if conf.mixed_precision else dummy_context_mgr() as mpc:
+                G_x = generator(x, labels)
+                D_fake = discriminator(G_x, labels)
 
-            generator_loss_meter.update(generator_loss.item(), batch_size)
-            content_loss_meter.update(content_loss.item(), batch_size)
-            style_loss_meter.update(style_loss.item(), batch_size)
-            color_loss_meter.update(color_loss.item(), batch_size)
-            tv_loss_meter.update(tv_loss.item(), batch_size)
-            transform_loss_meter.update(transform_loss.item(), batch_size)
+                G_x_feature_dict = VGG(G_x)
+                x_feature_dict = VGG(x)
+                y_gray_feature_dict = VGG(y_gray)
+
+                G_x_feature = G_x_feature_dict[29].float()
+                x_feature = x_feature_dict[29].float()
+                y_gray_feature = y_gray_feature_dict[29].float()
+
+                generator_loss = conf.g_adv_weight * loss.generator_hinge_loss_func(D_fake)
+                content_loss = conf.con_weight * loss.con_loss_func(x_feature, G_x_feature)
+                style_loss = conf.sty_weight * loss.style_loss_func(y_gray_feature, G_x_feature)
+                color_loss = conf.color_weight * loss.color_loss_func(x, G_x)
+                tv_loss = conf.tv_weight * loss.total_variation_loss(G_x)
+                transform_loss = conf.transform_weight * loss.transform_loss(Transform(x), Transform(G_x))
+
+                Generator_loss = generator_loss + content_loss + style_loss + color_loss + tv_loss + transform_loss
+
+                generator_loss_meter.update(generator_loss.item(), batch_size)
+                content_loss_meter.update(content_loss.item(), batch_size)
+                style_loss_meter.update(style_loss.item(), batch_size)
+                color_loss_meter.update(color_loss.item(), batch_size)
+                tv_loss_meter.update(tv_loss.item(), batch_size)
+                transform_loss_meter.update(transform_loss.item(), batch_size)
+
+            if conf.mixed_precision:
+                scaler.scale(Generator_loss).backward()
+                scaler.step(G_optimizer)
+                scaler.update()
+            else:
+                Generator_loss.backward()
+                G_optimizer.step()
 
         if cur_iter % conf.print_freq == 0:
             discriminator_loss_val = discriminator_loss_meter.avg
@@ -185,6 +239,8 @@ def train_one_iter(train_loader_src, train_loader_tgt
         torch.save(state, os.path.join(conf.checkpoint_dir, saved_name))
         print('save checkpoint %s to disk...' % saved_name)
 
+    return train_loader_src_iterator, train_loader_tgt_iterator
+
 
 def test(test_loader_src, generator, class_num, cur_epoch, conf):
     for n, (x, x_gray) in enumerate(test_loader_src):
@@ -231,17 +287,17 @@ def train(conf):
     discriminator = Discriminator(n_class=train_data_tgt.get_class_size()).to(conf.device)
     Transform = Transform_block().to(conf.device)
 
-    VGG = VGG19(init_weights=conf.vgg_model, feature_mode=True).to(conf.device)
-    for param in VGG.parameters():
-        param.require_grad = False
+    device_plan = {0: conf.device}
+    VGG = VGGFeatures([29], pooling='average').to(conf.device)
+    VGG.distribute_layers(device_plan)
 
     # Adam optimizer
     G_init_optimizer = optim.Adam(filter(lambda p: p.requires_grad,
-                                    generator.parameters()), lr=conf.g_lr, betas=(0.5, 0.999))
+                                         generator.parameters()), lr=conf.g_lr, betas=(0.5, 0.999))
     G_optimizer = optim.Adam(filter(lambda p: p.requires_grad,
-                                          generator.parameters()), lr=conf.g_lr, betas=(0.5, 0.999))
+                                    generator.parameters()), lr=conf.g_lr, betas=(0.5, 0.999))
     D_optimizer = optim.Adam(filter(lambda p: p.requires_grad,
-                                          discriminator.parameters()), lr=conf.d_lr, betas=(0.5, 0.999))
+                                    discriminator.parameters()), lr=conf.d_lr, betas=(0.5, 0.999))
 
     start_iter = 0
 
@@ -271,6 +327,8 @@ def train(conf):
     generator.train()
     discriminator.train()
 
+    scaler = torch.cuda.amp.GradScaler()
+
     reconstruct_loss_meter = AverageMeter()
     discriminator_loss_meter = AverageMeter()
     generator_loss_meter = AverageMeter()
@@ -281,38 +339,32 @@ def train(conf):
     transform_loss_meter = AverageMeter()
 
     print('start iteration:', start_iter)
-    j = conf.training_rate
+    train_loader_src_iterator = iter(train_loader_src)
+    train_loader_tgt_iterator = iter(train_loader_tgt)
+
     for current_iter in range(start_iter, conf.max_iter):
         if current_iter < conf.reconstruct_iter:
-            train_one_iter(train_loader_src, train_loader_tgt
-                            , generator, discriminator, Transform, VGG
-                            , G_init_optimizer, G_optimizer, D_optimizer
-                            , reconstruct_loss_meter
-                            , discriminator_loss_meter, generator_loss_meter
-                            , content_loss_meter, style_loss_meter, color_loss_meter, tv_loss_meter, transform_loss_meter
-                            , current_iter, conf, reconstruct_only=True)
+            train_loader_src_iterator, train_loader_tgt_iterator \
+                = train_one_iter(train_loader_src, train_loader_tgt
+                                 , train_loader_src_iterator, train_loader_tgt_iterator
+                                 , generator, discriminator, Transform, VGG
+                                 , G_init_optimizer, G_optimizer, D_optimizer, scaler
+                                 , reconstruct_loss_meter
+                                 , discriminator_loss_meter, generator_loss_meter
+                                 , content_loss_meter, style_loss_meter
+                                 , color_loss_meter, tv_loss_meter, transform_loss_meter
+                                 , current_iter, conf, reconstruct_only=True)
         else:
-            if j == conf.training_rate:
-                train_one_iter(train_loader_src, train_loader_tgt
-                                , generator, discriminator, Transform, VGG
-                                , G_init_optimizer, G_optimizer, D_optimizer
-                                , reconstruct_loss_meter
-                                , discriminator_loss_meter, generator_loss_meter
-                                , content_loss_meter, style_loss_meter, color_loss_meter, tv_loss_meter, transform_loss_meter
-                                , current_iter, conf, reconstruct_only=False, update_G=True)
-            else:
-                train_one_iter(train_loader_src, train_loader_tgt
-                               , generator, discriminator, Transform, VGG
-                               , G_init_optimizer, G_optimizer, D_optimizer
-                               , reconstruct_loss_meter
-                               , discriminator_loss_meter, generator_loss_meter
-                               , content_loss_meter, style_loss_meter, color_loss_meter, tv_loss_meter,
-                               transform_loss_meter
-                               , current_iter, conf, reconstruct_only=False, update_G=False)
-
-        j = j - 1
-        if j < 1:
-            j = conf.training_rate
+            train_loader_src_iterator, train_loader_tgt_iterator \
+                = train_one_iter(train_loader_src, train_loader_tgt
+                                 , train_loader_src_iterator, train_loader_tgt_iterator
+                                 , generator, discriminator, Transform, VGG
+                                 , G_init_optimizer, G_optimizer, D_optimizer, scaler
+                                 , reconstruct_loss_meter
+                                 , discriminator_loss_meter, generator_loss_meter
+                                 , content_loss_meter, style_loss_meter
+                                 , color_loss_meter, tv_loss_meter, transform_loss_meter
+                                 , current_iter, conf, reconstruct_only=False)
 
         if current_iter % conf.test_freq == 0:
             test(test_loader_src, generator, train_data_tgt.get_class_size(), current_iter, conf)
@@ -327,7 +379,8 @@ if __name__ == '__main__':
     parser.add_argument('--val_dataset', type=str, default='val', help='dataset_name')
 
     parser.add_argument('--max_iter', type=int, default=100000, help='The number of epochs to run')
-    parser.add_argument('--reconstruct_iter', type=int, default=1000, help='The number of epochs for weight initialization')
+    parser.add_argument('--reconstruct_iter', type=int, default=1000,
+                        help='The number of epochs for weight initialization')
     parser.add_argument('--batch_size', type=int, default=12,
                         help='The size of batch size')  # if light : batch_size = 20
     parser.add_argument('--print_freq', type=int, default=100, help='The number of loss print freq')
@@ -353,7 +406,8 @@ if __name__ == '__main__':
                         help='Weight about Transform block')  # 1. for Hayao, 0.1 for Paprika, 1. for Shinkai
 
     # ---------------------------------------------
-    parser.add_argument('--training_rate', type=int, default=1, help='training rate about G & D')
+    parser.add_argument('--d_steps_per_iter', type=int, default=1, help='training times per iter about D')
+    parser.add_argument('--g_steps_per_iter', type=int, default=1, help='training times per iter about G')
     parser.add_argument('--gan_type', type=str, default='lsgan',
                         help='[gan / lsgan / wgan-gp / wgan-lp / dragan / hinge')
 
@@ -370,6 +424,8 @@ if __name__ == '__main__':
     parser.add_argument('--vgg_model', type=str, default='vgg19-dcbb9e9d.pth',
                         help='file name to load the vgg model for feature extraction')
     parser.add_argument('--pretrained', type=bool, default=False,
+                        help='whether to pretrained')
+    parser.add_argument('--mixed_precision', type=bool, default=False,
                         help='whether to pretrained')
     parser.add_argument('--pretrain_model', type=str, default='checkpoint/',
                         help='file name to load the model for training')

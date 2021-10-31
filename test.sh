@@ -13,13 +13,13 @@
 CUDA_VISIBLE_DEVICES=0 python test.py \
     --input_dir 'tmp_img/' \
     --output_dir 'generate_img/' \
-    --checkpoint 'train_20210822/checkpoint/ASMStyleGAN_Epoch_59999.pt' \
+    --checkpoint 'train_20211031/checkpoint/ASMStyleGAN_Epoch_39999.pt' \
     --resize 2400
 
 CUDA_VISIBLE_DEVICES=0 python test.py \
     --input_dir 'generate_img/' \
     --output_dir 'generate_img_again/' \
-    --checkpoint 'train_20210822/checkpoint/ASMStyleGAN_Epoch_59999.pt' \
+    --checkpoint 'train_20211031/checkpoint/ASMStyleGAN_Epoch_39999.pt' \
     --resize 2400
 
 #python test.py \
