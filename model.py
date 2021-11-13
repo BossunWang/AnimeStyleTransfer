@@ -182,7 +182,6 @@ class InvertedResBlockV2(nn.Module):
 #     def forward(self, input):
 
 
-
 class ConvSpectralNorm(nn.Module):
     def __init__(self, in_ch, out_ch, kernel_size=3, stride=1, padding=1, pad_mode="reflect", groups=1, bias=False):
         super(ConvSpectralNorm, self).__init__()
@@ -259,27 +258,25 @@ class Generator(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
-                # try:
-                #     nn.init.zeros_(m.bias)
-                # except:
-                #     print("No bias found!")
-
             if isinstance(m, nn.Embedding):
                 nn.init.xavier_uniform_(m.weight)
 
-    def forward(self, input, condition=None, align_corners=True, get_feature=False):
-        out_a = self.block_a(input)
-        out_b = self.block_b(out_a)
+    def forward(self, input, condition=None, align_corners=True, get_feature=False, interpolation=False):
+        if not interpolation:
+            out_a = self.block_a(input)
+            out_b = self.block_b(out_a)
 
-        if get_feature:
-            return out_b
+            out_c = self.block_c(out_b)
+            out = self.conditional_res(out_c, condition)
 
-        out_c = self.block_c(out_b)
-        out = self.conditional_res(out_c, condition)
+            # print('out_a:', out_a.size())
+            # print('out:', out.size())
+            output_ASM = self.asm(out_a, out, condition)
 
-        # print('out_a:', out_a.size())
-        # print('out:', out.size())
-        output_ASM = self.asm(out_a, out, condition)
+            if get_feature:
+                return out, output_ASM
+        else:
+            out, output_ASM = input
 
         # about align_corners: https://zhuanlan.zhihu.com/p/87572724
         out = F.interpolate(out, scale_factor=2, mode="bilinear", align_corners=align_corners)
@@ -405,25 +402,6 @@ class Discriminator(nn.Module):
         )
         self.embed3 = spectral_norm(nn.Embedding(n_class, chn))
         self.linear3 = spectral_norm(nn.Linear(chn, 1))
-
-        self.conv = nn.Sequential(
-            ConvSpectralNorm(3, 32, stride=1),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            ConvSpectralNorm(32, 64, stride=2, pad_mode='zero'),
-            nn.LeakyReLU(0.2, inplace=True),
-            ConvSpectralNorm(64, 128, stride=1, pad_mode='zero'),
-            nn.GroupNorm(num_groups=1, num_channels=128, affine=True),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            ConvSpectralNorm(128, 128, stride=2, pad_mode='zero'),
-            nn.LeakyReLU(0.2, inplace=True),
-            ConvSpectralNorm(128, 256, stride=1, pad_mode='zero'),
-            nn.GroupNorm(num_groups=1, num_channels=256, affine=True),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            ConvSpectralNorm(256, 1, stride=1, pad_mode='zero')
-        )
 
         self.__weights_init__()
 

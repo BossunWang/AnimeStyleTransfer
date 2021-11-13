@@ -18,7 +18,7 @@ class Scale(nn.Module):
     def forward(self, *args, **kwargs):
         return self.module(*args, **kwargs) * self.scale
 
-
+# "E": [64, 64, "M", 128, 128, "M", 256, 256, 256, 256, "M", 512, 512, 512, 512, "M", 512, 512, 512, 512, "M"]
 class VGGFeatures(nn.Module):
     poolings = {'max': nn.MaxPool2d, 'average': nn.AvgPool2d, 'l2': partial(nn.LPPool2d, 2)}
     pooling_scales = {'max': 1., 'average': 2., 'l2': 0.78}
@@ -64,7 +64,7 @@ class VGGFeatures(nn.Module):
     def _get_min_size(layers):
         last_layer = max(layers)
         min_size = 1
-        for layer in [4, 9, 18, 27, 36]:
+        for layer in [4, 9, 18, 27, 36]: # before 'M'
             if last_layer < layer:
                 break
             min_size *= 2
